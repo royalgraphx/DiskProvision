@@ -1,0 +1,26 @@
+name: Build and Package
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup environment and compile
+        run: |
+          mkdir -p artifacts
+          cd src
+          gcc DiskProvision.c -o ../artifacts/DiskProvision
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: DiskProvision_Linux
+          path: artifacts/*

@@ -65,8 +65,8 @@ void stringToUpper(char *str) {
 
 int main() {
     // Check if required packages are installed
-    if (!isExecutableAvailable("qemu-img") || !isExecutableAvailable("mkfs.fat") || !isExecutableAvailable("modprobe")) {
-        printf("Please install the required packages: qemu-utils, dosfstools, and modprobe capability.\n");
+    if (!isExecutableAvailable("qemu-img") || !isExecutableAvailable("qemu-nbd") || !isExecutableAvailable("mkfs.fat")) {
+        printf("Please install the required packages: qemu-utils and dosfstools.\n");
         return 1;
     }
 
@@ -83,7 +83,8 @@ int main() {
 
         // Display welcome message
         printf("Welcome to DiskProvision!\n");
-        printf("Copyright (c) 2023 RoyalGraphX\n\n");
+        printf("Copyright (c) 2023 RoyalGraphX\n");
+        printf("Linux x86_64 Pre-Release 0.0.2\n\n");
 
         // Display menu options
         printf("Menu:\n");
@@ -91,7 +92,7 @@ int main() {
         printf("2. Delete Disk Image\n");
         printf("3. Mount Disk Image\n");
         printf("4. Unmount Disk Image\n");
-        printf("5. Exit\n");
+        printf("5. Exit\n\n");
         printf("Enter your choice: ");
         scanf("%d", &choice);  // Read user's choice
 
@@ -418,8 +419,8 @@ int main() {
                         sleep(3);
                     }
 
-                    // Mount /dev/nbd0 to the "mnt" directory
-                    if (system("sudo mount /dev/nbd0 mnt") != 0) {
+                    // Mount /dev/nbd0 to the "mnt" directory with desired ownership
+                    if (system("sudo mount -o uid=$(id -u),gid=$(id -g) /dev/nbd0 mnt") != 0) {
                         printf("Failed to mount /dev/nbd0 to 'mnt' directory.\n");
                         sleep(3);
                         break;

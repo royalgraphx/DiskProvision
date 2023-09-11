@@ -25,7 +25,6 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# Local Build Directory
-build/*
+# Watchdog and src Directory
 watchdog
 watchdog_src/*

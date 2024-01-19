@@ -2,7 +2,7 @@
  * DiskProvision - Allows the creation, management, and updating of disk images for use with QEMU.
  * DiskProvision.c - The source code of the DiskProvision program itself.
  * BSD 3-Clause "New" or "Revised" License
- * Copyright (c) 2023 RoyalGraphX
+ * Copyright (c) 2024 RoyalGraphX
  * All rights reserved.
  */
 
@@ -63,6 +63,22 @@ void stringToUpper(char *str) {
     }
 }
 
+// Define the debug_disable variable (1 for disable, 0 for enable)
+#define DEBUG_DISABLE 1
+
+// Main function, conditionally compiled based on DEBUG_DISABLE
+#if DEBUG_DISABLE
+int main() {
+    printf("DiskProvision is currently disabled. Please use the bash scripts located in the legacy folder.\n");
+    printf("If you for whatever reason enable DiskProvision, do not report bugs or issues.\n");
+    printf("\n\n");
+    printf("Quickly make a new OpenCore.img by issuing the following command:\n");
+    printf("./legacy/init.sh\n\n");
+    printf("Make sure to unmount the image before using it in a Virtual Machine:\n");
+    printf("./legacy/unmount.sh\n\n");
+    return 0;
+}
+#else
 int main() {
     // Check if required packages are installed
     if (!isExecutableAvailable("qemu-img") || !isExecutableAvailable("qemu-nbd") || !isExecutableAvailable("mkfs.fat")) {
@@ -84,7 +100,7 @@ int main() {
         // Display welcome message
         printf("Welcome to DiskProvision!\n");
         printf("Copyright (c) 2023 RoyalGraphX\n");
-        printf("Linux x86_64 Pre-Release 0.0.2\n\n");
+        printf("Linux x86_64 Pre-Release 0.0.3\n\n");
 
         // Display menu options
         printf("Menu:\n");
@@ -385,49 +401,99 @@ int main() {
                         printf("nbd module is already loaded. Proceeding...\n");
                     }
 
-                    // Check if /dev/nbd0 is already connected
-                    if (system("lsblk -o NAME | grep -q '^nbd0$'") == 0) {
-                        printf("/dev/nbd0 is already connected. Disconnecting...\n");
-                        if (system("sudo qemu-nbd --disconnect /dev/nbd0") != 0) {
-                            printf("Failed to disconnect /dev/nbd0.\n");
+                    int nbd_number = 0;
+                    int max_nbd_attempts = 6;  // You can adjust the maximum number of attempts
+
+                    while (nbd_number < max_nbd_attempts) {
+                    // Check if /dev/nbdX is already connected
+                    char nbd_device[15];
+                    snprintf(nbd_device, sizeof(nbd_device), "/dev/nbd%d", nbd_number);
+
+                    char lsblk_command[512];
+                    snprintf(lsblk_command, sizeof(lsblk_command), "lsblk -o NAME | grep -q '^%s$'", nbd_device);
+
+                    if (system(lsblk_command) == 0) {
+                        printf("%s is already connected. Disconnecting...\n", nbd_device);
+                        
+                        char disconnect_command[512];
+                        snprintf(disconnect_command, sizeof(disconnect_command), "sudo qemu-nbd --disconnect %s", nbd_device);
+
+                        if (system(disconnect_command) != 0) {
+                            printf("Failed to disconnect %s.\n", nbd_device);
                             sleep(3);
                             break;
                         }
                     }
 
-                    // Use qemu-nbd to connect the image
+                    // Use qemu-nbd to connect the image to the current /dev/nbdX
                     char nbd_command[512];
-                    snprintf(nbd_command, sizeof(nbd_command), "sudo qemu-nbd --connect=/dev/nbd0 -f raw images/%s", selected_image_name);
+                    snprintf(nbd_command, sizeof(nbd_command), "sudo qemu-nbd --connect=%s -f raw images/%s 2>&1", nbd_device, selected_image_name);
 
-                    if (system(nbd_command) != 0) {
-                        printf("Failed to connect /dev/nbd0 to the image.\n");
-                        sleep(3);
-                        break;
-                    }
-
-                    printf("Image '%s' mounted as /dev/nbd0.\n", selected_image_name);
-
-                    // Create a mount point if it doesn't exist
-                    struct stat st;
-                    if (stat("mnt", &st) == -1) {
-                        if (mkdir("mnt", 0755) != 0) {
-                            printf("Failed to create 'mnt' directory.\n");
-                            sleep(3);
-                            break;
+                    // Open a pipe to read the command output
+                    FILE *fp = popen(nbd_command, "r");
+                    if (fp != NULL) {
+                        // Read and print the output of the command
+                        char buffer[512];
+                        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+                            printf("%s", buffer);
                         }
-                        printf("Created 'mnt' directory.\n");
-                        sleep(3);
+
+                        // Close the pipe
+                        pclose(fp);
+
+                        // Additional sleep to see the error message
+                        sleep(5);
+                    } else {
+                        printf("Failed to open pipe for command execution.\n");
                     }
 
-                    // Mount /dev/nbd0 to the "mnt" directory with desired ownership
-                    if (system("sudo mount -o uid=$(id -u),gid=$(id -g) /dev/nbd0 mnt") != 0) {
-                        printf("Failed to mount /dev/nbd0 to 'mnt' directory.\n");
-                        sleep(3);
-                        break;
-                    }
+                    if (system(nbd_command) == 0) {
+                        printf("Image '%s' mounted as %s.\n", selected_image_name, nbd_device);
 
-                    printf("Image mounted to 'mnt' directory successfully.\n");
-                    sleep(3);
+                        // Create a mount point if it doesn't exist
+                        struct stat st;
+                        if (stat("mnt", &st) == -1) {
+                            if (mkdir("mnt", 0755) != 0) {
+                                printf("Failed to create 'mnt' directory.\n");
+                                sleep(3);
+                                break;
+                            }
+                            printf("Created 'mnt' directory.\n");
+                            sleep(3);
+                        }
+
+                        // Mount /dev/nbdX to the "mnt" directory with desired ownership
+                        char mount_command[512];
+                        snprintf(mount_command, sizeof(mount_command), "sudo mount -o uid=$(id -u),gid=$(id -g) %s mnt", nbd_device);
+
+                        if (system(mount_command) == 0) {
+                            printf("Image mounted to 'mnt' directory successfully.\n");
+                            sleep(3);
+                            break;  // Successful mount, exit the loop
+                        } else {
+                            printf("Failed to mount %s to 'mnt' directory.\n", nbd_device);
+                            sleep(3);
+                        }
+                    } else {
+                    printf("Failed to connect %s to the image. Error details:\n", nbd_device);
+
+                    // Print detailed error information
+                    char error_command[512];
+                    snprintf(error_command, sizeof(error_command), "sudo qemu-nbd --connect=%s -f raw images/%s", nbd_device, selected_image_name);
+                    system(error_command);
+
+                    // Additional sleep to see the error message
+                    sleep(5);
+                }
+
+                    // Increment nbd_number for the next attempt
+                    nbd_number++;
+                }
+
+                    // If the loop completes without a successful mount, print an error message
+                    if (nbd_number == max_nbd_attempts) {
+                        printf("Failed to mount the image on any available nbd device.\n");
+                    }
                 }
                 break;
             case 4:
@@ -438,29 +504,53 @@ int main() {
 
                     // Check if the "mnt" directory exists
                     if (directoryExists("mnt")) {
-                        // Unmount the image from the "mnt" directory
-                        if (system("sudo umount mnt") != 0) {
-                            printf("Failed to unmount the image.\n");
-                            sleep(3);
-                            break;
-                        }
-                        printf("Image unmounted.\n");
+                        // Find the connected NBD device
+                        int nbd_number = 0;
+                        char nbd_device[15];
+                        while (1) {
+                        snprintf(nbd_device, sizeof(nbd_device), "/dev/nbd%d", nbd_number);
 
-                        // Disconnect the NBD device
-                        if (system("sudo qemu-nbd --disconnect /dev/nbd0") != 0) {
-                            printf("Failed to disconnect NBD device.\n");
-                            sleep(3);
-                            break;
-                        }
-                        printf("NBD device disconnected.\n");
+                        // Check if /dev/nbdX is already connected
+                        char lsblk_command[512];
+                        snprintf(lsblk_command, sizeof(lsblk_command), "lsblk -o NAME | grep -q '^%s$'", nbd_device);
 
-                        // Remove the "mnt" directory
-                        if (system("rm -rf mnt") != 0) {
-                            printf("Failed to remove 'mnt' directory.\n");
-                            sleep(3);
-                            break;
+                        if (system(lsblk_command) == 0) {
+                            printf("%s is already connected. Disconnecting...\n", nbd_device);
+
+                            // Unmount the image from the "mnt" directory
+                            char umount_command[512];
+                            snprintf(umount_command, sizeof(umount_command), "sudo umount mnt");
+                            if (system(umount_command) != 0) {
+                                printf("Failed to unmount the image.\n");
+                                sleep(3);
+                                break;
+                            }
+                            printf("Image unmounted.\n");
+
+                            // Disconnect the NBD device
+                            char disconnect_command[512];
+                            snprintf(disconnect_command, sizeof(disconnect_command), "sudo qemu-nbd --disconnect %s", nbd_device);
+                            if (system(disconnect_command) != 0) {
+                                printf("Failed to disconnect NBD device.\n");
+                                sleep(3);
+                                break;
+                            }
+                            printf("NBD device disconnected from %s.\n", nbd_device);
+
+                            // Remove the "mnt" directory
+                            if (system("rm -rf mnt") != 0) {
+                                printf("Failed to remove 'mnt' directory.\n");
+                                sleep(3);
+                                break;
+                            }
+                            printf("Directory 'mnt' removed.\n");
+
+                            break;  // Exit the loop as the unmounting process is complete
                         }
-                        printf("Directory 'mnt' removed.\n");
+
+                        // Increment nbd_number for the next attempt
+                        nbd_number++;
+                    }
                     } else {
                         printf("No mounted image found in 'mnt' directory.\n");
                     }
@@ -483,3 +573,4 @@ int main() {
 
     return 0;
 }
+#endif

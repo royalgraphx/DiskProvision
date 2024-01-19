@@ -4,7 +4,7 @@
 DiskProvision - Allows the creation, management, and updating of disk images for use with QEMU.
 build_all.sh - Compile all C files in the src directory and output to the build folder.
 BSD 3-Clause "New" or "Revised" License
-Copyright (c) 2023 RoyalGraphX
+Copyright (c) 2024 RoyalGraphX
 All rights reserved.
 '
 

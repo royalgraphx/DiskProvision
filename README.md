@@ -2,8 +2,8 @@
   <img width="650" height="200" src="assets/HeaderDiskProvision.png">
 </p>
 
-<h1 align="center">Pre-Release Version 0.0.2</h1>
-<h4 align="center">Allows the creation, management, and updating of disk images for use with QEMU.</h4>
+<h1 align="center">Pre-Release Version 0.0.3</h1>
+<h4 align="center">Allows the creation, management, and updating of disk images for use with Virtual Machines.</h4>
 
 ## About
 

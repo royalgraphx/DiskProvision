@@ -2,7 +2,7 @@
  * DiskProvision_Darwin - Allows the creation, management, and updating of disk images for use with QEMU on macOS.
  * DiskProvision_Darwin.c - The source code of the DiskProvision program for macOS.
  * BSD 3-Clause "New" or "Revised" License
- * Copyright (c) 2023 RoyalGraphX
+ * Copyright (c) 2024 RoyalGraphX
  * All rights reserved.
  */
 
@@ -13,6 +13,7 @@
 #include <ctype.h>  // Include ctype.h for toupper()
 #include <dirent.h> // For directory listing
 #include <sys/stat.h> // For stat() function
+#include <pwd.h>
 
 // Function to convert a string to uppercase
 void stringToUpper(char *str) {
@@ -32,15 +33,28 @@ int main() {
     char image_name[256];
     char image_size[256];
     char image_path[512];
+    char username[256];
+
+    // Get the username based on the UID of the user who launched the program
+    struct passwd *pw = getpwuid(getuid());
+    if (pw == NULL) {
+        // Failed to get the username
+        printf("Failed to retrieve the username.\n");
+        return 1;
+    }
+
+    strncpy(username, pw->pw_name, sizeof(username) - 1);
+    username[sizeof(username) - 1] = '\0';
+
     int choice;
 
     do {
         system("clear");
 
         // Display welcome message
-        printf("Welcome to DiskProvision!\n");
+        printf("Welcome to DiskProvision, %s!\n", username);
         printf("Copyright (c) 2023 RoyalGraphX\n");
-        printf("Darwin x86_64 Pre-Release 0.0.1\n\n");
+        printf("Darwin x86_64 Pre-Release 0.0.2\n\n");
 
         // Display menu options
         printf("Menu:\n");
@@ -48,7 +62,9 @@ int main() {
         printf("2. Mount Disk Image\n");
         printf("3. Unmount Disk Image\n");
         printf("4. Delete Disk Image\n");
-        printf("5. Exit\n\n");
+        printf("5. Mount UTM Disk Image\n");
+        printf("6. Unmount UTM Disk Image\n");
+        printf("7. Exit\n\n");
         printf("Enter your choice: ");
         scanf("%d", &choice);
 
@@ -275,17 +291,97 @@ int main() {
                 }
                 break;
             case 5:
+                {
+                    system("clear");
+
+                    // Mount UTM Disk Image logic
+
+                    // Specify the directory to check for UTM images
+                    char utm_directory[512];
+                    snprintf(utm_directory, sizeof(utm_directory),
+                             "/Users/%s/Library/Containers/com.utmapp.UTM/Data/Documents/DarwinUTM.utm/Data/", username);
+
+                    printf("UTM Disk images available:\n");
+
+                    // List all files in the UTM directory
+                    DIR *utm_dp;
+                    struct dirent *utm_entry;
+                    utm_dp = opendir(utm_directory);
+                    if (utm_dp == NULL) {
+                        printf("Failed to open UTM directory.\n");
+                        sleep(2);
+                        break;
+                    }
+
+                    int utm_image_count = 0;
+                    char utm_image_names[256][256];
+
+                    while ((utm_entry = readdir(utm_dp))) {
+                        if (utm_entry->d_type == DT_REG && strstr(utm_entry->d_name, ".qcow2")) {
+                            utm_image_count++;
+                            strcpy(utm_image_names[utm_image_count], utm_entry->d_name);
+                            printf("%d. %s\n", utm_image_count, utm_entry->d_name);
+                        }
+                    }
+                    closedir(utm_dp);
+
+                    if (utm_image_count == 0) {
+                        printf("No UTM disk images found in the specified directory.\n");
+                        sleep(2);
+                        break;
+                    }
+
+                    int selected_utm_image;
+                    printf("Enter the number of the UTM image to mount (1-%d): ", utm_image_count);
+                    scanf("%d", &selected_utm_image);
+
+                    if (selected_utm_image < 1 || selected_utm_image > utm_image_count) {
+                        printf("Invalid selection.\n");
+                        sleep(2);
+                        break;
+                    }
+
+                    // Get the name of the selected UTM image
+                    strcpy(image_name, utm_image_names[selected_utm_image]);
+
+                    // Construct the path for the .qcow2 UTM image
+                    snprintf(image_path, sizeof(image_path), "%s%s", utm_directory, image_name);
+
+                    // TODO: Convert QCOW2 to a temporary .img to mount
+
+                    // TODO: Mount the converted UTM image to the "mnt" directory
+                    char mount_utm_command[512];
+                    snprintf(mount_utm_command, sizeof(mount_utm_command),
+                             "hdiutil attach %s -mountpoint mnt/", image_path);
+
+                    if (system(mount_utm_command) != 0) {
+                        printf("Failed to mount the UTM image.\n");
+                        sleep(2);
+                        break;
+                    }
+
+                    printf("UTM image '%s' mounted to 'mnt' directory successfully.\n", image_name);
+                    sleep(2);
+                }
+                break;
+            case 6:
+                // TODO: Unmount UTM Disk Image Logic, includes TODO: Convert back temp .img
+                printf("Currently not available.\n");
+                sleep(2);
+                break;
+            case 7:
                 // Exit the program
                 printf("Exiting DiskProvision. Goodbye!\n");
                 break;
             default:
                 printf("Invalid choice. Please select a valid option.\n");
+                sleep(2);
         }
 
         // Clear the input buffer
         while (getchar() != '\n');
 
-    } while (choice != 5);
+    } while (choice != 7);
 
     return 0;
 }
